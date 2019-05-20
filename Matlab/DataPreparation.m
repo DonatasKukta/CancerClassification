@@ -25,11 +25,108 @@ DataTable = convertToNormalizedValues(DataTable,QuantitativeCols);
 
 % Sudaryti kovariaciju matrica
 matrixData = table2array(DataTable);
-cov(matrixData)
+covariationMatrix = array2table(cov(matrixData));
+covariationMatrix.Properties.VariableNames = DataTable.Properties.VariableNames;
+covariationMatrix = covariationMatrix(:,ResultQualitiveCols)
+covariationMatrix = removeDuplicationAndNegatives(covariationMatrix)
+[allTargets, allFeatures] = separateTargetFromFeatureAttributes(DataTable , ResultQualitiveCols);
+allTargets;
+allFeatures;
+%maxVals = getMaxValues(covariationMatrix);
+baseCoeff = 0.05;
+coeffStep = 0.1;
 
-writetable(DataTable, 'results.csv')
-%scatter(colOne,colTwo)
+writetable(DataTable(:, [QualitiveCols,QuantitativeCols]),"NoReductionFeatures.csv")
+writetable(DataTable(:, ResultQualitiveCols),"Targets.csv")
+for i = 1:3
+    disp(" iteracijos isrinktos dimensijos:")
+    fundamentalFeatures = findFundamentalFeatures(allFeatures.Properties.VariableNames,covariationMatrix,baseCoeff)   
+    %filename = string(size(fundamentalFeatures,2))+"procSumazintosDim.csv"
+    writetable(DataTable(:, [fundamentalFeatures,ResultQualitiveCols]),i+ "All-" + string(size(fundamentalFeatures,2))+"-reducedDim.csv")
+    writetable(DataTable(:, fundamentalFeatures),i+ "Features-" + string(size(fundamentalFeatures,2))+"-reducedDim.csv")
+    baseCoeff = baseCoeff + coeffStep;
+end
+
+%targetMatrix = table2array(allTargets)
+%featuresMatrix = table2array(allFeatures)
+%writetable(DataTable, 'AllDimensions.csv');
+%plotCol = covariationMatrix{:,32};
+%n = size(plotCol,1);
+%zeroCol = zeros(1,n);
 %histogram(DataTable{:,30});
+%testuoti su nftool
+
+
+function fundamentalFeatures = findFundamentalFeatures(features, covTable, atrrCountThreshold)
+    fundamentalFeatures = []    
+    colCount = width(covTable);
+    rowCount = height(covTable);
+    attrCount = int8(rowCount * atrrCountThreshold);
+    attrCounts = getArray(colCount, attrCount);
+    zerosArr = zeros(1,colCount);
+    proceed = 1;
+    
+    while proceed
+       for i=1:colCount
+           %Randame maksimalia reiksme ir jos indeksa.
+          [maxVal, MaxIndex] = max(covTable{:,i});
+          currName = features(1,MaxIndex);          
+          % Sekanti karta ieskosime naujo max  
+          covTable{MaxIndex, i} = 0; 
+          maxcoord = [MaxIndex,i, maxVal]
+          %Jei reikia
+          if attrCounts(1,i) > 0          
+            %sumazinti atitinkama attrCounts reiksme vienetu
+            attrCounts(1,i) =  attrCounts(1,i) - 1;
+          end           
+          if ~isempty(fundamentalFeatures)
+            if    ismember(currName, fundamentalFeatures)
+                continue 
+            end
+          end
+          % prideti max index kintamojo varda i atsakymu masyva 
+          fundamentalFeatures = [fundamentalFeatures, currName];  
+       end
+       proceed = ~isequal(attrCounts,zerosArr);
+    end
+end
+
+function maxVals = getMaxValues(table)
+    maxVals = array2table(max(table{:,:}));
+    maxVals.Properties.VariableNames = table.Properties.VariableNames;
+end
+
+function matrix = removeDuplicationAndNegatives(matrix)
+w = width(matrix);
+h = height(matrix);
+
+    for col=1:(width(matrix)-1)
+        matrix{:,col} = abs(matrix{:,col});
+        startIndex = h - w + col +1;
+       for row = startIndex : h
+           matrix{row,col} = 0;
+       end
+    end
+    %remove last column from table
+    matrix([h-w+1:h],:) = [];
+end
+
+function [targetTable, featureTable] = separateTargetFromFeatureAttributes(table, ResultQualitiveCols)
+    
+targetTable=table;
+featureTable=table;
+allnames = table.Properties.VariableNames;
+    for i = 1:width(table)
+      currColName = allnames(1,i);
+      [isTarget, index] = ismember(currColName, ResultQualitiveCols);  
+      if isTarget
+          featureTable(:,currColName) = [];
+      else
+          targetTable(:,currColName) = [];
+      end
+    end
+    
+end
 
 function newTable = convertToNormalizedValues(oldTable, quanC)
 newTable = array2table(zeros(height(oldTable),width(oldTable)));
@@ -235,5 +332,12 @@ function errorDataCount = getMissingValCountByCol(table, resultCount)
             else
             end
         end
+    end
+end
+
+function array = getArray(length, value)
+    array = zeros(1,length)
+    for i=1:length
+        array(1,i) = value;
     end
 end
